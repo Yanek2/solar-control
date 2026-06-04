@@ -1,0 +1,17 @@
+[Unit]
+Description=Solar Export Control (IBEX + FusionSolar)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/solar-control
+ExecStart=/root/solar-control/venv/bin/python /root/solar-control/main.py
+Restart=on-failure
+RestartSec=60
+StandardOutput=append:/root/solar-control/solar_control.log
+StandardError=append:/root/solar-control/solar_control.log
+
+[Install]
+WantedBy=multi-user.target

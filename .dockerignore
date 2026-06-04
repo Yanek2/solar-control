@@ -1,0 +1,6 @@
+creds.txt
+debug/
+__pycache__/
+*.pyc
+*.pem
+.claude/

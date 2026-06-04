@@ -1,0 +1,6 @@
+creds.txt
+debug/
+*.png
+__pycache__/
+*.pyc
+.env

@@ -1,0 +1,58 @@
+name: Solar Control
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # every 5 minutes
+  workflow_dispatch:          # allows manual trigger from GitHub UI
+
+concurrency:
+  group: solar-control
+  cancel-in-progress: false   # never cancel a running check
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4        # kill job if it hangs
+
+    permissions:
+      contents: write         # needed to push status.json back to repo
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('requirements.txt') }}
+
+      - name: Install Playwright browsers
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: playwright install chromium --with-deps
+
+      - name: Run solar control check
+        env:
+          FUSION_USER: ${{ secrets.FUSION_USER }}
+          FUSION_PASS: ${{ secrets.FUSION_PASS }}
+        run: python check.py
+
+      - name: Commit updated status
+        run: |
+          git config user.name "Solar Bot"
+          git config user.email "solar-bot@noreply"
+          git add docs/status.json
+          git diff --staged --quiet && echo "No change" && exit 0
+          git commit -m "status update"
+          git pull --rebase origin main
+          git push

@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python show_prices.py)",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import sys; sys.stdout.buffer.write\\(sys.stdin.buffer.read\\(\\)\\)\")",
+      "PowerShell(cd C:\\\\Users\\\\ykara\\\\solar-control; $env:PYTHONIOENCODING=\"utf-8\"; python -c \"import asyncio; from ibex import get_current_price; import logging; logging.basicConfig\\(level=logging.DEBUG\\); price = asyncio.run\\(get_current_price\\(\\)\\); print\\('PRICE:', price\\)\" 2>&1)",
+      "PowerShell(Get-Process *)",
+      "Bash(ssh *)",
+      "Bash(scp *)",
+      "Bash(fly version *)",
+      "PowerShell(fly version *)",
+      "PowerShell(iwr https://fly.io/install.ps1 -useb | iex)",
+      "PowerShell(fly auth *)",
+      "PowerShell(fly apps *)",
+      "PowerShell(fly secrets *)",
+      "PowerShell(fly deploy *)",
+      "PowerShell(fly logs *)",
+      "PowerShell(fly status *)",
+      "PowerShell(fly machine *)",
+      "PowerShell(fly scale *)",
+      "PowerShell(New-Item *)",
+      "PowerShell(python -c \"import hashlib; print\\(hashlib.sha256\\(b'MilenSolar'\\).hexdigest\\(\\)\\)\")",
+      "PowerShell(gh *)",
+      "PowerShell(winget install *)",
+      "PowerShell(gh auth *)",
+      "PowerShell(git *)"
+    ]
+  }
+}

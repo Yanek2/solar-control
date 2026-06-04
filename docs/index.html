@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Solar Monitor</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f1117;color:#e0e0e0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+#lock{text-align:center;max-width:320px;width:100%}
+#lock h2{color:#fff;margin-bottom:20px;font-size:1.2rem}
+#lock input{width:100%;padding:12px 16px;border-radius:8px;border:1px solid #333;background:#1a1d27;color:#fff;font-size:1rem;margin-bottom:12px;outline:none}
+#lock input:focus{border-color:#4a9eff}
+#lock button{width:100%;padding:12px;border-radius:8px;border:none;background:#4a9eff;color:#fff;font-size:1rem;font-weight:600;cursor:pointer}
+#lock button:hover{background:#3a8eef}
+#lock .err{color:#e74c3c;font-size:.85rem;margin-top:8px}
+#app{display:none;width:100%;max-width:860px}
+h1{font-size:1.3rem;font-weight:600;color:#fff;margin-bottom:18px}
+.banner{padding:10px 16px;border-radius:8px;margin-bottom:14px;font-size:.88rem}
+.warn{background:#7f4f00;color:#ffe08a}
+.err-b{background:#4a0000;color:#ff9a9a;font-family:monospace;font-size:.82rem}
+.cards{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:22px}
+.card{background:#1a1d27;border-radius:10px;padding:18px 22px;flex:1;min-width:160px}
+.cl{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:#888;margin-bottom:6px}
+.sm{font-size:.95rem;color:#ccc}
+.foot{margin-top:12px;font-size:.72rem;color:#555;text-align:right}
+</style>
+</head>
+<body>
+
+<div id="lock">
+  <h2>Solar Monitor</h2>
+  <input type="password" id="pw" placeholder="Password" onkeydown="if(event.key==='Enter')check()">
+  <button onclick="check()">Enter</button>
+  <div class="err" id="perr"></div>
+</div>
+
+<div id="app">
+  <h1>Solar Export Control</h1>
+  <div id="stale" class="banner warn" style="display:none">⚠ Last check over 15 min ago — service may be down</div>
+  <div id="errbanner" class="banner err-b" style="display:none"></div>
+  <div class="cards">
+    <div class="card"><div class="cl">Mode</div><div id="mode" style="font-size:2rem;font-weight:700">—</div></div>
+    <div class="card"><div class="cl">IBEX Price</div><div id="price" style="font-size:1.7rem;font-weight:600;color:#fff">—</div></div>
+    <div class="card"><div class="cl">Threshold</div><div id="threshold" class="sm">—</div></div>
+    <div class="card"><div class="cl">Last Check</div><div id="ts" class="sm">—</div></div>
+  </div>
+  <div class="foot">Auto-refreshes every 60 s</div>
+</div>
+
+<script>
+// Password stored as SHA-256 hash — change HASH to lock with a different password
+// Current password: MilenSolar
+const HASH = "1a18de3fd22d190c802d22ff776902ae6225f60d0db84dd3be7e2950c104156f";
+
+async function sha256(str) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
+}
+
+async function check() {
+  const h = await sha256(document.getElementById("pw").value);
+  if (h === HASH) {
+    document.getElementById("lock").style.display = "none";
+    document.getElementById("app").style.display = "block";
+    sessionStorage.setItem("auth", "1");
+    loadStatus();
+    setInterval(loadStatus, 60000);
+  } else {
+    document.getElementById("perr").textContent = "Wrong password";
+  }
+}
+
+async function loadStatus() {
+  try {
+    const r = await fetch("status.json?t=" + Date.now());
+    const d = await r.json();
+
+    const mode = d.mode || "unknown";
+    const modeEl = document.getElementById("mode");
+    if (mode === "zero_export")      { modeEl.textContent = "ZERO EXPORT"; modeEl.style.color = "#e74c3c"; }
+    else if (mode === "no_limit")    { modeEl.textContent = "NO LIMIT";    modeEl.style.color = "#2ecc71"; }
+    else                             { modeEl.textContent = "UNKNOWN";     modeEl.style.color = "#888"; }
+
+    document.getElementById("price").textContent = d.price != null ? d.price.toFixed(2) + " EUR/MWh" : "—";
+    document.getElementById("threshold").textContent = (d.threshold || 15.0).toFixed(1) + " EUR/MWh";
+    document.getElementById("ts").textContent = d.timestamp || "—";
+
+    const stale = !d.timestamp || (Date.now() - new Date(d.timestamp.replace(" UTC","Z")).getTime()) > 900000;
+    document.getElementById("stale").style.display = stale ? "block" : "none";
+
+    const errEl = document.getElementById("errbanner");
+    if (d.error) { errEl.textContent = "Last error: " + d.error; errEl.style.display = "block"; }
+    else { errEl.style.display = "none"; }
+  } catch(e) {
+    document.getElementById("stale").style.display = "block";
+  }
+}
+
+if (sessionStorage.getItem("auth") === "1") {
+  document.getElementById("lock").style.display = "none";
+  document.getElementById("app").style.display = "block";
+  loadStatus();
+  setInterval(loadStatus, 60000);
+}
+</script>
+</body>
+</html>
