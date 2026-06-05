@@ -15,7 +15,7 @@ env:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 4        # kill job if it hangs
+    timeout-minutes: 8        # kill job if it hangs
 
     permissions:
       contents: write         # needed to push status.json back to repo
