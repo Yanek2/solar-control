@@ -592,6 +592,7 @@ async def _set_apc(page: Page, mode: str) -> bool:
     await _delay(2000, 3500)
     await _shot(page, "08_after_save")
 
+    toast_seen = False
     try:
         await page.wait_for_selector(
             ".el-message--success, .ant-message-success, "
@@ -599,10 +600,43 @@ async def _set_apc(page: Page, mode: str) -> bool:
             timeout=8000,
         )
         logger.info("Save confirmed by success toast")
+        toast_seen = True
     except Exception:
-        logger.warning("No success toast -- assuming save went through (check debug/08_after_save.png)")
+        logger.warning("No success toast -- verifying by reading back dropdown value")
 
-    return True
+    # Read back the dropdown value to confirm the change actually stuck.
+    await _delay(1500, 2500)
+    verified_val = await page.evaluate("""() => {
+        const sels = [
+            '.ant-select-selection-item',
+            '.ant-select-selection__rendered',
+            '.el-select .el-input__inner',
+        ];
+        for (const s of sels) {
+            const el = document.querySelector(s);
+            if (el) return (el.innerText || el.value || '').trim();
+        }
+        return '';
+    }""")
+    logger.info("Post-save APC value: '%s'", verified_val)
+
+    confirmed = verified_val and any(
+        lbl.lower() in verified_val.lower() or verified_val.lower() in lbl.lower()
+        for lbl in labels
+    )
+    if confirmed:
+        logger.info("Save verified: APC is now '%s'", verified_val)
+        return True
+
+    if toast_seen:
+        logger.warning("Toast seen but read-back shows '%s' -- proceeding", verified_val)
+        return True
+
+    logger.error(
+        "Save failed: APC still reads '%s' after save attempt (check debug/08_after_save.png)",
+        verified_val,
+    )
+    return False
 
 
 # ---------------------------------------------------------------------------

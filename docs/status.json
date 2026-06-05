@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-06-05 11:35 UTC",
-  "mode": "zero_export",
-  "price": 0.0,
+  "timestamp": null,
+  "mode": "unknown",
+  "price": null,
   "threshold": 15.0,
-  "error": null
+  "error": "Mode reset — will re-verify and re-apply on next run"
 }
