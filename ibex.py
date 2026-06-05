@@ -233,56 +233,60 @@ async def _get_price_via_playwright() -> float | None:
             }""")
             logger.info("IBEX page shows date: %s", shown_date)
 
-            # Log the date picker HTML so we know the prev-button structure.
+            # Log small elements inside .date-picker-section to find the < button.
             date_area_html = await page.evaluate(r"""() => {
-                for (const inp of document.querySelectorAll('input')) {
-                    if (/^\d{2}\.\d{2}\.\d{4}$/.test(inp.value)) {
-                        const p = (inp.parentElement && inp.parentElement.parentElement)
-                                  ? inp.parentElement.parentElement : (inp.parentElement || inp);
-                        return p.outerHTML.slice(0, 800);
-                    }
+                const section = document.querySelector('.date-picker-section');
+                if (!section) return 'no section';
+                const inp = section.querySelector('input');
+                const inpLeft = inp ? inp.getBoundingClientRect().left : 9999;
+                const items = [];
+                for (const el of section.querySelectorAll('*')) {
+                    const r = el.getBoundingClientRect();
+                    if (r.width > 0 && r.height > 0)
+                        items.push(el.tagName + '[' + el.className.slice(0,30) + ']'
+                                   + '(x=' + Math.round(r.left) + ',w=' + Math.round(r.width) + ')'
+                                   + '=' + (el.innerText||el.textContent||'').trim().slice(0,20));
                 }
-                return null;
+                return items.join(' | ');
             }""")
-            logger.info("Date picker HTML: %s", date_area_html)
+            logger.info("Date picker elements: %s", date_area_html)
 
             tomorrow_str = (_date.today() + _td(days=1)).strftime("%d.%m.%Y")
             if shown_date == tomorrow_str:
                 logger.info("IBEX page shows tomorrow (%s) — navigating to today", tomorrow_str)
                 # Search ALL visible elements — the < button may be a div/span.
                 clicked = await page.evaluate("""() => {
-                    // The date picker is inside .date-picker-section.
-                    // The < (prev) button is the leftmost clickable element inside it.
                     const section = document.querySelector('.date-picker-section');
-                    if (section) {
-                        const children = Array.from(section.querySelectorAll('*'));
-                        const visible = children.filter(el => {
-                            const r = el.getBoundingClientRect();
-                            return r.width > 0 && r.height > 0 && r.left < 300;
-                        });
-                        // Sort by left position; skip the input itself
-                        visible.sort((a, b) =>
-                            a.getBoundingClientRect().left - b.getBoundingClientRect().left);
-                        for (const el of visible) {
-                            const tag = el.tagName;
-                            if (tag === 'INPUT' || tag === 'SELECT') continue;
-                            el.click();
-                            const r = el.getBoundingClientRect();
-                            return tag + '|' + el.className + '|x=' + Math.round(r.left)
-                                   + '|txt=' + (el.innerText || el.textContent || '').trim().slice(0,20);
+                    if (!section) return 'no-section';
+                    const inp = section.querySelector('input');
+                    if (!inp) return 'no-input';
+                    const inpRect = inp.getBoundingClientRect();
+                    // Find small elements to the LEFT of the date input (the < button).
+                    const candidates = [];
+                    for (const el of section.querySelectorAll('*')) {
+                        if (el === inp || el.contains(inp)) continue;
+                        const r = el.getBoundingClientRect();
+                        if (r.width > 0 && r.width < 80 && r.height > 0
+                                && r.right <= inpRect.left + 10) {
+                            candidates.push({el, r});
                         }
                     }
-                    // Fallback: any element whose own text is exactly '<'
+                    if (candidates.length > 0) {
+                        // Prefer smallest (most specific) element
+                        candidates.sort((a, b) => a.r.width - b.r.width);
+                        const {el, r} = candidates[0];
+                        el.click();
+                        return el.tagName + '|' + el.className + '|w=' + Math.round(r.width)
+                               + '|txt=' + (el.innerText||el.textContent||'').trim().slice(0,10);
+                    }
+                    // Fallback: element with exactly '<' as its own text node
                     for (const el of document.querySelectorAll('*')) {
                         const own = el.childNodes.length === 1
                             && el.childNodes[0].nodeType === 3
                             ? el.childNodes[0].textContent.trim() : '';
                         if (own === '<') {
                             const r = el.getBoundingClientRect();
-                            if (r.width > 0 && r.height > 0) {
-                                el.click();
-                                return el.tagName + '|fallback|txt=<';
-                            }
+                            if (r.width > 0 && r.height > 0) { el.click(); return 'text-<|' + el.tagName; }
                         }
                     }
                     return null;
