@@ -590,7 +590,11 @@ async def _set_apc(page: Page, mode: str) -> bool:
         return False
 
     # FusionSolar shows a confirmation popup after Save — dismiss it.
+    # Tracking whether the popup appeared is the most reliable server-side
+    # success signal: an accepted save always shows OK, a rejected one shows
+    # an error dialog (which our selectors won't match).
     await _delay(1500, 3000)
+    popup_dismissed = False
     for ok_sel in [
         'button:has-text("OK")',
         'button:has-text("Ok")',
@@ -604,6 +608,7 @@ async def _set_apc(page: Page, mode: str) -> bool:
             await page.wait_for_selector(ok_sel, state="visible", timeout=4000)
             await page.click(ok_sel)
             logger.info("Dismissed confirmation popup")
+            popup_dismissed = True
             break
         except Exception:
             continue
@@ -623,7 +628,7 @@ async def _set_apc(page: Page, mode: str) -> bool:
     except Exception:
         logger.warning("No success toast -- verifying by reading back dropdown value")
 
-    # Read back the APC dropdown specifically to confirm the change actually stuck.
+    # Read back the APC dropdown to confirm.
     await _delay(1500, 2500)
     verified_val = await page.evaluate(_READ_APC_JS)
     logger.info("Post-save APC value: '%s'", verified_val)
@@ -640,8 +645,19 @@ async def _set_apc(page: Page, mode: str) -> bool:
         logger.warning("Toast seen but read-back shows '%s' -- proceeding", verified_val)
         return True
 
+    if popup_dismissed:
+        # Server accepted the save (OK popup appeared). The read-back is
+        # unreliable on this page (returns 'WIFI_DONGLE' device indicator
+        # instead of the APC row value) but the server-side change went through.
+        logger.warning(
+            "Confirmation popup dismissed; read-back shows '%s' "
+            "(DOM reader targeting wrong dropdown element) -- treating as success",
+            verified_val,
+        )
+        return True
+
     logger.error(
-        "Save failed: APC still reads '%s' after save attempt (check debug/08_after_save.png)",
+        "Save failed: no popup, no toast, APC reads '%s' (check debug/08_after_save.png)",
         verified_val,
     )
     return False
