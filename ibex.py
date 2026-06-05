@@ -198,13 +198,6 @@ async def _get_price_via_playwright() -> float | None:
 
             await page.goto(IBEX_URL, wait_until="networkidle", timeout=30000)
 
-            # Dismiss cookie banner so it doesn't block navigation buttons.
-            try:
-                await page.click('button:has-text("Ok"), button:has-text("OK")', timeout=2000)
-                await asyncio.sleep(0.3)
-            except Exception:
-                pass
-
             # Wait for a <td> whose text starts with HH:MM — that's the price table.
             _WAIT_TIME_CELL = (
                 "() => Array.from(document.querySelectorAll('table td')).some("
@@ -216,11 +209,26 @@ async def _get_price_via_playwright() -> float | None:
             except Exception:
                 await asyncio.sleep(5)
 
-            # IBEX SDAC page shows tomorrow's prices by default after ~noon.
-            # If the page is showing tomorrow's date, click the < prev-day button.
+            # Dismiss cookie banner AFTER page loads (it appears late).
+            try:
+                await page.click('button:has-text("Ok")', timeout=3000)
+                await asyncio.sleep(0.3)
+            except Exception:
+                pass
+
+            # IBEX SDAC shows tomorrow's prices by default after ~noon.
+            # page.content() doesn't include JS-set input values, so use evaluate().
+            shown_date = await page.evaluate(r"""() => {
+                for (const inp of document.querySelectorAll('input')) {
+                    const v = inp.value.trim();
+                    if (/^\d{2}\.\d{2}\.\d{4}$/.test(v)) return v;
+                }
+                const m = (document.body.innerText || '').match(/\d{2}\.\d{2}\.\d{4}/);
+                return m ? m[0] : null;
+            }""")
+            logger.info("IBEX page shows date: %s", shown_date)
             tomorrow_str = (_date.today() + _td(days=1)).strftime("%d.%m.%Y")
-            page_html_check = await page.content()
-            if tomorrow_str in page_html_check:
+            if shown_date == tomorrow_str:
                 logger.info("IBEX page shows tomorrow (%s) — navigating to today", tomorrow_str)
                 clicked = await page.evaluate(r"""() => {
                     for (const el of document.querySelectorAll('button, [role="button"], a')) {
