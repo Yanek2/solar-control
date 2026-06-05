@@ -37,6 +37,36 @@ DEBUG_DIR.mkdir(exist_ok=True)
 MODE_ZERO_EXPORT = "zero_export"
 MODE_NO_LIMIT = "no_limit"
 
+# Reads the current Active Power Control dropdown value.
+# Walks up from the label element but only searches SIBLING subtrees at each
+# level, so it never accidentally returns a device-type dropdown higher on the
+# page (e.g. 'WIFI_DONGLE') that lives in a shared ancestor.
+_READ_APC_JS = """() => {
+    const label = 'Active Power Control';
+    for (const tag of ['td', 'span', 'div', 'label', 'th']) {
+        for (const el of document.querySelectorAll(tag)) {
+            if ((el.innerText || el.textContent || '').trim() !== label) continue;
+            let child = el;
+            let parent = el.parentElement;
+            for (let i = 0; i < 6; i++) {
+                if (!parent) break;
+                for (const sib of Array.from(parent.children)) {
+                    if (sib === child) continue;
+                    for (const s of ['.ant-select-selection-item',
+                                     '.ant-select-selection__rendered',
+                                     '.el-select .el-input__inner']) {
+                        const d = sib.querySelector(s);
+                        if (d) { const v = (d.innerText || d.value || '').trim(); if (v) return v; }
+                    }
+                }
+                child = parent;
+                parent = parent.parentElement;
+            }
+        }
+    }
+    return '';
+}"""
+
 _MODE_LABELS = {
     MODE_ZERO_EXPORT: [
         "Zero Export to Grid",
@@ -392,24 +422,7 @@ async def _set_apc(page: Page, mode: str) -> bool:
     await _delay(500, 1000)
 
     # Read current value before touching the dropdown
-    current_val = await page.evaluate("""() => {
-        const label = 'Active Power Control';
-        for (const tag of ['td', 'span', 'div', 'label', 'th']) {
-            for (const el of document.querySelectorAll(tag)) {
-                if ((el.innerText || el.textContent || '').trim() !== label) continue;
-                let parent = el.parentElement;
-                for (let i = 0; i < 6; i++) {
-                    if (!parent) break;
-                    for (const s of ['.ant-select-selection-item', '.ant-select-selection__rendered', '.el-select .el-input__inner']) {
-                        const d = parent.querySelector(s);
-                        if (d) return (d.innerText || d.value || '').trim();
-                    }
-                    parent = parent.parentElement;
-                }
-            }
-        }
-        return '';
-    }""")
+    current_val = await page.evaluate(_READ_APC_JS)
     logger.info("Current APC value: '%s'", current_val)
 
     already_set = current_val and any(
@@ -612,24 +625,7 @@ async def _set_apc(page: Page, mode: str) -> bool:
 
     # Read back the APC dropdown specifically to confirm the change actually stuck.
     await _delay(1500, 2500)
-    verified_val = await page.evaluate("""() => {
-        const label = 'Active Power Control';
-        for (const tag of ['td', 'span', 'div', 'label', 'th']) {
-            for (const el of document.querySelectorAll(tag)) {
-                if ((el.innerText || el.textContent || '').trim() !== label) continue;
-                let parent = el.parentElement;
-                for (let i = 0; i < 6; i++) {
-                    if (!parent) break;
-                    for (const s of ['.ant-select-selection-item', '.ant-select-selection__rendered', '.el-select .el-input__inner']) {
-                        const d = parent.querySelector(s);
-                        if (d) return (d.innerText || d.value || '').trim();
-                    }
-                    parent = parent.parentElement;
-                }
-            }
-        }
-        return '';
-    }""")
+    verified_val = await page.evaluate(_READ_APC_JS)
     logger.info("Post-save APC value: '%s'", verified_val)
 
     confirmed = verified_val and any(
