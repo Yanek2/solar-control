@@ -44,16 +44,33 @@ def _parse_float(text: str) -> float | None:
 def _extract_price_from_html(html: str) -> float | None:
     soup = BeautifulSoup(html, "lxml")
 
-    # The page has multiple tables; find the 15-minute period table (has "Период" in headers)
+    # Find the period price table. Try header keyword matching first,
+    # then fall back to any table whose rows start with HH:MM timestamps.
+    _PERIOD_KEYWORDS = ("Период", "Period", "Час", "Time", "Интервал")
+    _PRICE_KEYWORDS  = ("Цена", "EUR", "Price", "лв", "BGN")
+
     table = None
     for t in soup.find_all("table"):
         t_rows = t.find_all("tr")
         if not t_rows:
             continue
         t_headers = [c.get_text(strip=True) for c in t_rows[0].find_all(["th", "td"])]
-        if any("Период" in h for h in t_headers):
+        if any(kw in h for h in t_headers for kw in _PERIOD_KEYWORDS):
             table = t
+            logger.debug("Period table found via header keyword; headers: %s", t_headers)
             break
+
+    if not table:
+        # Fallback: any table where ≥2 of the first 5 data rows have a cell
+        # matching HH:MM (the delivery-period start time).
+        time_pat = re.compile(r"^\d{2}:\d{2}")
+        for t in soup.find_all("table"):
+            data_rows = [r for r in t.find_all("tr") if r.find("td")]
+            sample = [r.find("td") for r in data_rows[:5]]
+            if sum(1 for c in sample if c and time_pat.match(c.get_text(strip=True))) >= 2:
+                table = t
+                logger.info("Period table found via time-pattern fallback")
+                break
 
     if not table:
         logger.warning("No period table found on IBEX page")
@@ -63,27 +80,28 @@ def _extract_price_from_html(html: str) -> float | None:
     if not rows:
         return None
 
-    # Identify column indices from header
+    # Identify column indices from header row (or guess defaults).
     header_cells = rows[0].find_all(["th", "td"])
     headers = [c.get_text(strip=True) for c in header_cells]
     logger.debug("IBEX table headers: %s", headers)
 
     price_col = next(
-        (i for i, h in enumerate(headers) if "Цена" in h or "EUR" in h), 2
+        (i for i, h in enumerate(headers) if any(kw in h for kw in _PRICE_KEYWORDS)), 2
     )
     period_col = next(
-        (i for i, h in enumerate(headers) if "Период" in h), 1
+        (i for i, h in enumerate(headers) if any(kw in h for kw in _PERIOD_KEYWORDS)), 1
     )
 
-    # IBEX table uses CET (UTC+1, no DST) for delivery period times,
-    # regardless of local DST — so in summer Sofia (EEST=UTC+3) is 2h ahead.
+    # IBEX table uses CET (UTC+1, no DST) for delivery period times.
+    # Sofia in summer (EEST = UTC+3) is 2 h ahead, so 18:01 Sofia = 16:01 CET.
     from datetime import timezone, timedelta
     cet_tz = timezone(timedelta(hours=1))
     now_cet = datetime.now(tz=cet_tz)
     current_hour = now_cet.hour
     quarter_start = (now_cet.minute // 15) * 15
     period_prefix = f"{current_hour:02d}:{quarter_start:02d}"
-    logger.debug("Looking for IBEX period starting with '%s' (CET)", period_prefix)
+    hour_prefix   = f"{current_hour:02d}:"   # matches any minute within the hour
+    logger.info("Looking for IBEX period '%s' (CET = UTC+1; local Sofia time is UTC+3)", period_prefix)
 
     fallback_price = None
 
@@ -97,21 +115,35 @@ def _extract_price_from_html(html: str) -> float | None:
         if price is None:
             continue
 
-        # Save first valid price as fallback
         if fallback_price is None:
             fallback_price = price
 
-        # Match the current 15-minute period by start time
         period_text = cells[period_col].get_text(strip=True)
+        # Match exact 15-min block first, then any entry in the same hour.
         if period_text.startswith(period_prefix):
             logger.info("Price for period '%s': %.2f EUR/MWh", period_text, price)
             return price
 
+    # No exact 15-min match — try matching any row in the current CET hour.
+    for row in rows[1:]:
+        cells = row.find_all(["td", "th"])
+        if len(cells) <= max(price_col, period_col):
+            continue
+        period_text = cells[period_col].get_text(strip=True)
+        if period_text.startswith(hour_prefix):
+            price_text = cells[price_col].get_text(strip=True)
+            price = _parse_float(price_text)
+            if price is not None:
+                logger.warning(
+                    "No exact quarter match for %s — using hour row '%s': %.2f EUR/MWh",
+                    period_prefix, period_text, price,
+                )
+                return price
+
     if fallback_price is not None:
         logger.warning(
             "No row matched period %s — returning first available price: %.2f",
-            period_prefix,
-            fallback_price,
+            period_prefix, fallback_price,
         )
     return fallback_price
 
