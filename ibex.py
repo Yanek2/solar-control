@@ -194,11 +194,22 @@ async def _get_price_via_playwright() -> float | None:
             if stealth:
                 await stealth.apply_stealth_async(page)
             await page.goto(IBEX_URL, wait_until="networkidle", timeout=30000)
-            # SuperJS redirects the page after networkidle — wait for the real table
+            # Wait for a <td> whose text starts with HH:MM — that's the price table.
+            # A plain wait_for_selector("table") fires too early on nav tables.
             import asyncio
-            await page.wait_for_selector("table", timeout=20000)
-            await asyncio.sleep(1)
+            try:
+                await page.wait_for_function(
+                    "() => Array.from(document.querySelectorAll('table td')).some("
+                    "    td => /^\\d{2}:\\d{2}/.test((td.innerText || td.textContent).trim())"
+                    ")",
+                    timeout=15000,
+                )
+                logger.debug("IBEX: time-cell detected in DOM")
+            except Exception:
+                logger.warning("IBEX: time-cell not detected after 15s — waiting extra 5s")
+                await asyncio.sleep(5)
             html = await page.content()
+            logger.debug("IBEX HTML snippet (first 1500 chars): %s", html[:1500])
             await browser.close()
 
         return _extract_price_from_html(html)
