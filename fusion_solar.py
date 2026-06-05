@@ -393,14 +393,20 @@ async def _set_apc(page: Page, mode: str) -> bool:
 
     # Read current value before touching the dropdown
     current_val = await page.evaluate("""() => {
-        const sels = [
-            '.ant-select-selection-item',
-            '.ant-select-selection__rendered',
-            '.el-select .el-input__inner',
-        ];
-        for (const s of sels) {
-            const el = document.querySelector(s);
-            if (el) return (el.innerText || el.value || '').trim();
+        const label = 'Active Power Control';
+        for (const tag of ['td', 'span', 'div', 'label', 'th']) {
+            for (const el of document.querySelectorAll(tag)) {
+                if ((el.innerText || el.textContent || '').trim() !== label) continue;
+                let parent = el.parentElement;
+                for (let i = 0; i < 6; i++) {
+                    if (!parent) break;
+                    for (const s of ['.ant-select-selection-item', '.ant-select-selection__rendered', '.el-select .el-input__inner']) {
+                        const d = parent.querySelector(s);
+                        if (d) return (d.innerText || d.value || '').trim();
+                    }
+                    parent = parent.parentElement;
+                }
+            }
         }
         return '';
     }""")
@@ -604,17 +610,23 @@ async def _set_apc(page: Page, mode: str) -> bool:
     except Exception:
         logger.warning("No success toast -- verifying by reading back dropdown value")
 
-    # Read back the dropdown value to confirm the change actually stuck.
+    # Read back the APC dropdown specifically to confirm the change actually stuck.
     await _delay(1500, 2500)
     verified_val = await page.evaluate("""() => {
-        const sels = [
-            '.ant-select-selection-item',
-            '.ant-select-selection__rendered',
-            '.el-select .el-input__inner',
-        ];
-        for (const s of sels) {
-            const el = document.querySelector(s);
-            if (el) return (el.innerText || el.value || '').trim();
+        const label = 'Active Power Control';
+        for (const tag of ['td', 'span', 'div', 'label', 'th']) {
+            for (const el of document.querySelectorAll(tag)) {
+                if ((el.innerText || el.textContent || '').trim() !== label) continue;
+                let parent = el.parentElement;
+                for (let i = 0; i < 6; i++) {
+                    if (!parent) break;
+                    for (const s of ['.ant-select-selection-item', '.ant-select-selection__rendered', '.el-select .el-input__inner']) {
+                        const d = parent.querySelector(s);
+                        if (d) return (d.innerText || d.value || '').trim();
+                    }
+                    parent = parent.parentElement;
+                }
+            }
         }
         return '';
     }""")
