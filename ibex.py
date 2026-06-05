@@ -209,7 +209,12 @@ async def _get_price_via_playwright() -> float | None:
                 logger.warning("IBEX: time-cell not detected after 15s — waiting extra 5s")
                 await asyncio.sleep(5)
             html = await page.content()
-            logger.debug("IBEX HTML snippet (first 1500 chars): %s", html[:1500])
+            # Log enough HTML to see the date context and table structure
+            logger.info("IBEX HTML snippet (first 3000 chars): %s", html[:3000])
+            # Save screenshot for artifact inspection
+            import os, pathlib
+            pathlib.Path("debug").mkdir(exist_ok=True)
+            await page.screenshot(path="debug/ibex_page.png", full_page=False)
             await browser.close()
 
         return _extract_price_from_html(html)
