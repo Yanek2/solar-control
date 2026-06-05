@@ -251,15 +251,22 @@ async def _get_price_via_playwright() -> float | None:
             }""")
             logger.info("Date picker elements: %s", date_area_html)
 
+            today_str = _date.today().strftime("%d.%m.%Y")
             tomorrow_str = (_date.today() + _td(days=1)).strftime("%d.%m.%Y")
             if shown_date == tomorrow_str:
                 logger.info("IBEX page shows tomorrow (%s) — clicking prev day", tomorrow_str)
                 try:
                     await page.click(".date-nav-btn", timeout=3000)
                     logger.info("Clicked .date-nav-btn (prev day)")
-                    await page.wait_for_function(_WAIT_TIME_CELL, timeout=10000)
+                    # Wait for the date input to update to today's date before reading.
+                    await page.wait_for_function(
+                        f"() => {{ const inp = document.querySelector('.date-input'); "
+                        f"return inp && inp.value === '{today_str}'; }}",
+                        timeout=10000,
+                    )
+                    logger.info("Date input updated to today (%s)", today_str)
                 except Exception as nav_exc:
-                    logger.warning("Could not click prev-day button: %s", nav_exc)
+                    logger.warning("Could not navigate to today: %s", nav_exc)
 
             html = await page.content()
             pathlib.Path("debug").mkdir(exist_ok=True)
