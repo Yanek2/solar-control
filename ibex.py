@@ -258,11 +258,16 @@ async def _get_price_via_playwright() -> float | None:
                 try:
                     await page.click(".date-nav-btn", timeout=3000)
                     logger.info("Clicked .date-nav-btn (prev day)")
-                    # Wait for the date input to update to today's date before reading.
+                    # Wait for the date input to update to today's date.
                     await page.wait_for_function(
                         f"() => {{ const inp = document.querySelector('.date-input'); "
                         f"return inp && inp.value === '{today_str}'; }}",
                         timeout=10000,
+                    )
+                    # Wait for the delivery-day animation to finish (data reload).
+                    await page.wait_for_function(
+                        "() => !document.querySelector('.delivery-day-info.animating')",
+                        timeout=5000,
                     )
                     logger.info("Date input updated to today (%s)", today_str)
                 except Exception as nav_exc:
