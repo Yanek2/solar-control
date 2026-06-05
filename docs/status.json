@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-06-05 07:56 UTC",
-  "mode": "unknown",
-  "price": null,
+  "timestamp": "2026-06-05 11:35 UTC",
+  "mode": "zero_export",
+  "price": 0.0,
   "threshold": 15.0,
-  "error": "Could not read IBEX price"
+  "error": null
 }
