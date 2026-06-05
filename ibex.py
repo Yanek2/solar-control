@@ -193,26 +193,57 @@ async def _get_price_via_playwright() -> float | None:
             page = await context.new_page()
             if stealth:
                 await stealth.apply_stealth_async(page)
+            import asyncio, pathlib
+            from datetime import date as _date, timedelta as _td
+
             await page.goto(IBEX_URL, wait_until="networkidle", timeout=30000)
-            # Wait for a <td> whose text starts with HH:MM — that's the price table.
-            # A plain wait_for_selector("table") fires too early on nav tables.
-            import asyncio
+
+            # Dismiss cookie banner so it doesn't block navigation buttons.
             try:
-                await page.wait_for_function(
-                    "() => Array.from(document.querySelectorAll('table td')).some("
-                    "    td => /^\\d{2}:\\d{2}/.test((td.innerText || td.textContent).trim())"
-                    ")",
-                    timeout=15000,
-                )
-                logger.debug("IBEX: time-cell detected in DOM")
+                await page.click('button:has-text("Ok"), button:has-text("OK")', timeout=2000)
+                await asyncio.sleep(0.3)
             except Exception:
-                logger.warning("IBEX: time-cell not detected after 15s — waiting extra 5s")
+                pass
+
+            # Wait for a <td> whose text starts with HH:MM — that's the price table.
+            _WAIT_TIME_CELL = (
+                "() => Array.from(document.querySelectorAll('table td')).some("
+                "    td => /^\\d{2}:\\d{2}/.test((td.innerText || td.textContent).trim())"
+                ")"
+            )
+            try:
+                await page.wait_for_function(_WAIT_TIME_CELL, timeout=15000)
+            except Exception:
                 await asyncio.sleep(5)
+
+            # IBEX SDAC page shows tomorrow's prices by default after ~noon.
+            # If the page is showing tomorrow's date, click the < prev-day button.
+            tomorrow_str = (_date.today() + _td(days=1)).strftime("%d.%m.%Y")
+            page_html_check = await page.content()
+            if tomorrow_str in page_html_check:
+                logger.info("IBEX page shows tomorrow (%s) — navigating to today", tomorrow_str)
+                clicked = await page.evaluate(r"""() => {
+                    for (const el of document.querySelectorAll('button, [role="button"], a')) {
+                        const txt = (el.innerText || el.textContent || '').trim();
+                        if (txt === '<' || txt === '‹' || txt === '←' || txt === '◄' ||
+                                /prev|back|назад/i.test(
+                                    el.getAttribute('aria-label') || '')) {
+                            const r = el.getBoundingClientRect();
+                            if (r.width > 0 && r.height > 0) { el.click(); return txt || 'icon'; }
+                        }
+                    }
+                    return null;
+                }""")
+                if clicked:
+                    logger.info("Clicked prev-day button: '%s'", clicked)
+                    try:
+                        await page.wait_for_function(_WAIT_TIME_CELL, timeout=10000)
+                    except Exception:
+                        await asyncio.sleep(3)
+                else:
+                    logger.warning("Could not find prev-day button — prices may be for tomorrow")
+
             html = await page.content()
-            # Log enough HTML to see the date context and table structure
-            logger.info("IBEX HTML snippet (first 3000 chars): %s", html[:3000])
-            # Save screenshot for artifact inspection
-            import os, pathlib
             pathlib.Path("debug").mkdir(exist_ok=True)
             await page.screenshot(path="debug/ibex_page.png", full_page=False)
             await browser.close()
