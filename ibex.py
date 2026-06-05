@@ -251,20 +251,37 @@ async def _get_price_via_playwright() -> float | None:
                 logger.info("IBEX page shows tomorrow (%s) — navigating to today", tomorrow_str)
                 # Search ALL visible elements — the < button may be a div/span.
                 clicked = await page.evaluate("""() => {
+                    // The date picker is inside .date-picker-section.
+                    // The < (prev) button is the leftmost clickable element inside it.
+                    const section = document.querySelector('.date-picker-section');
+                    if (section) {
+                        const children = Array.from(section.querySelectorAll('*'));
+                        const visible = children.filter(el => {
+                            const r = el.getBoundingClientRect();
+                            return r.width > 0 && r.height > 0 && r.left < 300;
+                        });
+                        // Sort by left position; skip the input itself
+                        visible.sort((a, b) =>
+                            a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+                        for (const el of visible) {
+                            const tag = el.tagName;
+                            if (tag === 'INPUT' || tag === 'SELECT') continue;
+                            el.click();
+                            const r = el.getBoundingClientRect();
+                            return tag + '|' + el.className + '|x=' + Math.round(r.left)
+                                   + '|txt=' + (el.innerText || el.textContent || '').trim().slice(0,20);
+                        }
+                    }
+                    // Fallback: any element whose own text is exactly '<'
                     for (const el of document.querySelectorAll('*')) {
-                        const txt = (el.innerText || el.textContent || '').trim();
-                        const lbl = el.getAttribute('aria-label') || '';
-                        const cls = el.className || '';
-                        // Match left-arrow text or prev/back aria-label or class
-                        const isArrow = txt === '<' || txt.charCodeAt(0) === 8249
-                            || txt.charCodeAt(0) === 8592 || txt.charCodeAt(0) === 9668;
-                        const isPrev = /prev|back/i.test(lbl) || /prev|back/i.test(cls);
-                        if (isArrow || isPrev) {
+                        const own = el.childNodes.length === 1
+                            && el.childNodes[0].nodeType === 3
+                            ? el.childNodes[0].textContent.trim() : '';
+                        if (own === '<') {
                             const r = el.getBoundingClientRect();
                             if (r.width > 0 && r.height > 0) {
                                 el.click();
-                                return el.tagName + '|' + cls + '|txt=' + txt
-                                       + '|code=' + txt.charCodeAt(0);
+                                return el.tagName + '|fallback|txt=<';
                             }
                         }
                     }
