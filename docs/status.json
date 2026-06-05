@@ -1,7 +1,7 @@
 {
-  "timestamp": null,
+  "timestamp": "2026-06-05 13:27 UTC",
   "mode": "unknown",
   "price": null,
   "threshold": 15.0,
-  "error": "Mode reset — will re-verify and re-apply on next run"
+  "error": "Could not read IBEX price"
 }
