@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-06-05 13:56 UTC",
+  "timestamp": "2026-06-05 14:16 UTC",
   "mode": "unknown",
-  "price": 0.0,
+  "price": 1.42,
   "threshold": 15.0,
   "error": "Failed to apply mode 'zero_export'"
 }
