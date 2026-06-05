@@ -209,12 +209,17 @@ async def _get_price_via_playwright() -> float | None:
             except Exception:
                 await asyncio.sleep(5)
 
-            # Dismiss cookie banner AFTER page loads (it appears late).
-            try:
-                await page.click('button:has-text("Ok")', timeout=3000)
-                await asyncio.sleep(0.3)
-            except Exception:
-                pass
+            # Dismiss cookie banner (may not be a <button>; search all elements).
+            await page.evaluate("""() => {
+                for (const el of document.querySelectorAll('*')) {
+                    const t = (el.innerText || el.textContent || '').trim();
+                    if (t === 'Ok' || t === 'OK') {
+                        const r = el.getBoundingClientRect();
+                        if (r.width > 0 && r.height > 0) { el.click(); return; }
+                    }
+                }
+            }""")
+            await asyncio.sleep(0.3)
 
             # IBEX SDAC shows tomorrow's prices by default after ~noon.
             # page.content() doesn't include JS-set input values, so use evaluate().
@@ -227,17 +232,40 @@ async def _get_price_via_playwright() -> float | None:
                 return m ? m[0] : null;
             }""")
             logger.info("IBEX page shows date: %s", shown_date)
+
+            # Log the date picker HTML so we know the prev-button structure.
+            date_area_html = await page.evaluate(r"""() => {
+                for (const inp of document.querySelectorAll('input')) {
+                    if (/^\d{2}\.\d{2}\.\d{4}$/.test(inp.value)) {
+                        const p = (inp.parentElement && inp.parentElement.parentElement)
+                                  ? inp.parentElement.parentElement : (inp.parentElement || inp);
+                        return p.outerHTML.slice(0, 800);
+                    }
+                }
+                return null;
+            }""")
+            logger.info("Date picker HTML: %s", date_area_html)
+
             tomorrow_str = (_date.today() + _td(days=1)).strftime("%d.%m.%Y")
             if shown_date == tomorrow_str:
                 logger.info("IBEX page shows tomorrow (%s) — navigating to today", tomorrow_str)
-                clicked = await page.evaluate(r"""() => {
-                    for (const el of document.querySelectorAll('button, [role="button"], a')) {
+                # Search ALL visible elements — the < button may be a div/span.
+                clicked = await page.evaluate("""() => {
+                    for (const el of document.querySelectorAll('*')) {
                         const txt = (el.innerText || el.textContent || '').trim();
-                        if (txt === '<' || txt === '‹' || txt === '←' || txt === '◄' ||
-                                /prev|back|назад/i.test(
-                                    el.getAttribute('aria-label') || '')) {
+                        const lbl = el.getAttribute('aria-label') || '';
+                        const cls = el.className || '';
+                        // Match left-arrow text or prev/back aria-label or class
+                        const isArrow = txt === '<' || txt.charCodeAt(0) === 8249
+                            || txt.charCodeAt(0) === 8592 || txt.charCodeAt(0) === 9668;
+                        const isPrev = /prev|back/i.test(lbl) || /prev|back/i.test(cls);
+                        if (isArrow || isPrev) {
                             const r = el.getBoundingClientRect();
-                            if (r.width > 0 && r.height > 0) { el.click(); return txt || 'icon'; }
+                            if (r.width > 0 && r.height > 0) {
+                                el.click();
+                                return el.tagName + '|' + cls + '|txt=' + txt
+                                       + '|code=' + txt.charCodeAt(0);
+                            }
                         }
                     }
                     return null;
