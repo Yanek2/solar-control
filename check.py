@@ -26,15 +26,19 @@ logger = logging.getLogger(__name__)
 STATUS_FILE = Path("docs/status.json")
 
 
-def _read_current_mode() -> str | None:
+def _read_status() -> tuple[str | None, float | None]:
+    """Returns (last_mode, last_price) from status.json, or (None, None)."""
     if STATUS_FILE.exists():
         try:
             data = json.loads(STATUS_FILE.read_text(encoding="utf-8"))
             mode = data.get("mode")
-            return mode if mode and mode != "unknown" else None
+            mode = mode if mode and mode != "unknown" else None
+            price = data.get("price")
+            price = float(price) if price is not None else None
+            return mode, price
         except Exception:
             pass
-    return None
+    return None, None
 
 
 def _write_status(mode: str | None, price: float | None, error: str | None = None) -> None:
@@ -57,15 +61,22 @@ async def run() -> None:
         logger.error("FUSION_USER / FUSION_PASS env vars not set")
         sys.exit(1)
 
-    current_mode = _read_current_mode()
+    current_mode, last_price = _read_status()
     logger.info("Stored mode from last run: %s", current_mode or "unknown")
 
     price = await get_current_price()
 
     if price is None:
-        logger.warning("Could not read IBEX price — will try again next cycle")
-        _write_status(current_mode, None, "Could not read IBEX price")
-        return
+        if last_price is not None:
+            price = last_price
+            logger.warning(
+                "Could not read IBEX price — using last known price: %.2f EUR/MWh",
+                price,
+            )
+        else:
+            logger.warning("Could not read IBEX price and no prior price available — skipping")
+            _write_status(current_mode, None, "Could not read IBEX price")
+            return
 
     logger.info("IBEX price: %.2f EUR/MWh  (threshold: %.2f)", price, PRICE_THRESHOLD)
     desired = MODE_ZERO_EXPORT if price < PRICE_THRESHOLD else MODE_NO_LIMIT
