@@ -590,28 +590,51 @@ async def _set_apc(page: Page, mode: str) -> bool:
         return False
 
     # FusionSolar shows a confirmation popup after Save — dismiss it.
-    # Tracking whether the popup appeared is the most reliable server-side
-    # success signal: an accepted save always shows OK, a rejected one shows
-    # an error dialog (which our selectors won't match).
-    await _delay(1500, 3000)
+    # Use JS to instantly scan for any visible primary button in a modal
+    # (avoids burning 4s per selector on sequential wait_for_selector).
+    _DISMISS_POPUP_JS = """() => {
+        const candidates = [
+            '.ant-modal-confirm-btns .ant-btn-primary',
+            '.ant-modal-footer .ant-btn-primary',
+            '.ant-modal .ant-btn-primary',
+            '.el-message-box__btns .el-button--primary',
+            '.el-dialog__footer .el-button--primary',
+        ];
+        for (const sel of candidates) {
+            for (const btn of document.querySelectorAll(sel)) {
+                const r = btn.getBoundingClientRect();
+                if (r.width > 0 && r.height > 0 && !btn.disabled) {
+                    btn.click();
+                    return sel + ' | ' + (btn.innerText || btn.textContent).trim();
+                }
+            }
+        }
+        // Fallback: any button whose text looks like a confirmation
+        const confirmWords = ['ok', 'confirm', 'yes', '确定', 'apply'];
+        for (const btn of document.querySelectorAll('button:not([disabled])')) {
+            const txt = (btn.innerText || btn.textContent).trim().toLowerCase();
+            if (confirmWords.some(w => txt === w || txt.startsWith(w))) {
+                const r = btn.getBoundingClientRect();
+                if (r.width > 0 && r.height > 0) {
+                    btn.click();
+                    return 'text-match | ' + (btn.innerText || btn.textContent).trim();
+                }
+            }
+        }
+        return null;
+    }"""
     popup_dismissed = False
-    for ok_sel in [
-        'button:has-text("OK")',
-        'button:has-text("Ok")',
-        'button:has-text("Confirm")',
-        '.el-button--primary:has-text("OK")',
-        '.ant-btn-primary:has-text("OK")',
-        '.modal-footer button:visible',
-        'div[role="dialog"] button:visible',
-    ]:
+    for attempt in range(4):
+        await _delay(1200, 2000)
         try:
-            await page.wait_for_selector(ok_sel, state="visible", timeout=4000)
-            await page.click(ok_sel)
-            logger.info("Dismissed confirmation popup")
-            popup_dismissed = True
-            break
-        except Exception:
-            continue
+            result = await page.evaluate(_DISMISS_POPUP_JS)
+            if result:
+                logger.info("Dismissed confirmation popup (attempt %d): %s", attempt + 1, result)
+                popup_dismissed = True
+                break
+            logger.debug("No confirmation popup found on attempt %d", attempt + 1)
+        except Exception as exc:
+            logger.debug("Popup JS check failed attempt %d: %s", attempt + 1, exc)
 
     await _delay(2000, 3500)
     await _shot(page, "08_after_save")
@@ -633,31 +656,34 @@ async def _set_apc(page: Page, mode: str) -> bool:
     verified_val = await page.evaluate(_READ_APC_JS)
     logger.info("Post-save APC value: '%s'", verified_val)
 
-    confirmed = verified_val and any(
+    read_matches_target = verified_val and any(
         lbl.lower() in verified_val.lower() or verified_val.lower() in lbl.lower()
         for lbl in labels
     )
-    if confirmed:
-        logger.info("Save verified: APC is now '%s'", verified_val)
+
+    if popup_dismissed:
+        if read_matches_target:
+            logger.info("Save verified: popup dismissed + APC reads '%s'", verified_val)
+        else:
+            logger.warning(
+                "Popup dismissed (server committed); read-back shows '%s' "
+                "(DOM reader may be targeting wrong element)", verified_val,
+            )
+        return True
+
+    if toast_seen and read_matches_target:
+        logger.info("Save verified: toast + APC reads '%s'", verified_val)
         return True
 
     if toast_seen:
         logger.warning("Toast seen but read-back shows '%s' -- proceeding", verified_val)
         return True
 
-    if popup_dismissed:
-        # Server accepted the save (OK popup appeared). The read-back is
-        # unreliable on this page (returns 'WIFI_DONGLE' device indicator
-        # instead of the APC row value) but the server-side change went through.
-        logger.warning(
-            "Confirmation popup dismissed; read-back shows '%s' "
-            "(DOM reader targeting wrong dropdown element) -- treating as success",
-            verified_val,
-        )
-        return True
-
+    # No popup and no toast — read-back alone is unreliable (the dropdown DOM
+    # reflects the locally-changed value even when the server save failed).
     logger.error(
-        "Save failed: no popup, no toast, APC reads '%s' (check debug/08_after_save.png)",
+        "Save failed: no popup dismissed, no success toast. "
+        "APC reads '%s' but this may be local DOM state (check debug/08_after_save.png)",
         verified_val,
     )
     return False
