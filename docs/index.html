@@ -37,7 +37,7 @@ h1{font-size:1.3rem;font-weight:600;color:#fff;margin-bottom:18px}
 
 <div id="app">
   <h1>Solar Export Control</h1>
-  <div id="stale" class="banner warn" style="display:none">⚠ Last check over 15 min ago — service may be down</div>
+  <div id="stale" class="banner warn" style="display:none">⚠ Last check over 6 hours ago — service may be down</div>
   <div id="errbanner" class="banner err-b" style="display:none"></div>
   <div class="cards">
     <div class="card"><div class="cl">Mode</div><div id="mode" style="font-size:2rem;font-weight:700">—</div></div>
@@ -86,7 +86,7 @@ async function loadStatus() {
     document.getElementById("threshold").textContent = (d.threshold || 15.0).toFixed(1) + " EUR/MWh";
     document.getElementById("ts").textContent = d.timestamp || "—";
 
-    const stale = !d.timestamp || (Date.now() - new Date(d.timestamp.replace(" UTC","Z")).getTime()) > 900000;
+    const stale = !d.timestamp || (Date.now() - new Date(d.timestamp.replace(" UTC","Z")).getTime()) > 21600000;
     document.getElementById("stale").style.display = stale ? "block" : "none";
 
     const errEl = document.getElementById("errbanner");

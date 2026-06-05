@@ -9,6 +9,9 @@ concurrency:
   group: solar-control
   cancel-in-progress: false   # never cancel a running check
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   check:
     runs-on: ubuntu-latest
