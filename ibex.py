@@ -253,52 +253,13 @@ async def _get_price_via_playwright() -> float | None:
 
             tomorrow_str = (_date.today() + _td(days=1)).strftime("%d.%m.%Y")
             if shown_date == tomorrow_str:
-                logger.info("IBEX page shows tomorrow (%s) — navigating to today", tomorrow_str)
-                # Search ALL visible elements — the < button may be a div/span.
-                clicked = await page.evaluate("""() => {
-                    const section = document.querySelector('.date-picker-section');
-                    if (!section) return 'no-section';
-                    const inp = section.querySelector('input');
-                    if (!inp) return 'no-input';
-                    const inpRect = inp.getBoundingClientRect();
-                    // Find small elements to the LEFT of the date input (the < button).
-                    const candidates = [];
-                    for (const el of section.querySelectorAll('*')) {
-                        if (el === inp || el.contains(inp)) continue;
-                        const r = el.getBoundingClientRect();
-                        if (r.width > 0 && r.width < 80 && r.height > 0
-                                && r.right <= inpRect.left + 10) {
-                            candidates.push({el, r});
-                        }
-                    }
-                    if (candidates.length > 0) {
-                        // Prefer smallest (most specific) element
-                        candidates.sort((a, b) => a.r.width - b.r.width);
-                        const {el, r} = candidates[0];
-                        el.click();
-                        return el.tagName + '|' + el.className + '|w=' + Math.round(r.width)
-                               + '|txt=' + (el.innerText||el.textContent||'').trim().slice(0,10);
-                    }
-                    // Fallback: element with exactly '<' as its own text node
-                    for (const el of document.querySelectorAll('*')) {
-                        const own = el.childNodes.length === 1
-                            && el.childNodes[0].nodeType === 3
-                            ? el.childNodes[0].textContent.trim() : '';
-                        if (own === '<') {
-                            const r = el.getBoundingClientRect();
-                            if (r.width > 0 && r.height > 0) { el.click(); return 'text-<|' + el.tagName; }
-                        }
-                    }
-                    return null;
-                }""")
-                if clicked:
-                    logger.info("Clicked prev-day button: '%s'", clicked)
-                    try:
-                        await page.wait_for_function(_WAIT_TIME_CELL, timeout=10000)
-                    except Exception:
-                        await asyncio.sleep(3)
-                else:
-                    logger.warning("Could not find prev-day button — prices may be for tomorrow")
+                logger.info("IBEX page shows tomorrow (%s) — clicking prev day", tomorrow_str)
+                try:
+                    await page.click(".date-nav-btn", timeout=3000)
+                    logger.info("Clicked .date-nav-btn (prev day)")
+                    await page.wait_for_function(_WAIT_TIME_CELL, timeout=10000)
+                except Exception as nav_exc:
+                    logger.warning("Could not click prev-day button: %s", nav_exc)
 
             html = await page.content()
             pathlib.Path("debug").mkdir(exist_ok=True)
