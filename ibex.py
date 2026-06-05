@@ -243,7 +243,7 @@ async def _get_price_via_playwright() -> float | None:
                 for (const el of section.querySelectorAll('*')) {
                     const r = el.getBoundingClientRect();
                     if (r.width > 0 && r.height > 0)
-                        items.push(el.tagName + '[' + el.className.slice(0,30) + ']'
+                        items.push(el.tagName + '[' + String(el.className||'').slice(0,30) + ']'
                                    + '(x=' + Math.round(r.left) + ',w=' + Math.round(r.width) + ')'
                                    + '=' + (el.innerText||el.textContent||'').trim().slice(0,20));
                 }
