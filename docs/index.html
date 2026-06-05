@@ -45,7 +45,7 @@ h1{font-size:1.3rem;font-weight:600;color:#fff;margin-bottom:18px}
     <div class="card"><div class="cl">Threshold</div><div id="threshold" class="sm">—</div></div>
     <div class="card"><div class="cl">Last Check</div><div id="ts" class="sm">—</div></div>
   </div>
-  <div class="foot">Auto-refreshes every 60 s</div>
+  <div class="foot">Auto-refreshes every 30 s &nbsp;·&nbsp; runs every ~5 min via GitHub Actions</div>
 </div>
 
 <script>
@@ -65,7 +65,7 @@ async function check() {
     document.getElementById("app").style.display = "block";
     sessionStorage.setItem("auth", "1");
     loadStatus();
-    setInterval(loadStatus, 60000);
+    setInterval(loadStatus, 30000);
   } else {
     document.getElementById("perr").textContent = "Wrong password";
   }
@@ -84,7 +84,19 @@ async function loadStatus() {
 
     document.getElementById("price").textContent = d.price != null ? d.price.toFixed(2) + " EUR/MWh" : "—";
     document.getElementById("threshold").textContent = (d.threshold || 15.0).toFixed(1) + " EUR/MWh";
-    document.getElementById("ts").textContent = d.timestamp || "—";
+    const tsEl = document.getElementById("ts");
+    if (d.timestamp) {
+      const dt = new Date(d.timestamp.replace(" UTC","Z").replace(" ","T"));
+      const fmt = (tz, label) => {
+        const t = dt.toLocaleTimeString("en-GB",{timeZone:tz,hour:"2-digit",minute:"2-digit"});
+        return t + " " + label;
+      };
+      const day = dt.toLocaleDateString("en-GB",{timeZone:"UTC",day:"2-digit",month:"2-digit"});
+      tsEl.innerHTML = day + "<br>"
+        + fmt("UTC","UTC") + " &nbsp; "
+        + fmt("Europe/Sofia","BG") + " &nbsp; "
+        + fmt("Europe/London","UK");
+    } else { tsEl.textContent = "—"; }
 
     const stale = !d.timestamp || (Date.now() - new Date(d.timestamp.replace(" UTC","Z")).getTime()) > 21600000;
     document.getElementById("stale").style.display = stale ? "block" : "none";
@@ -101,7 +113,7 @@ if (sessionStorage.getItem("auth") === "1") {
   document.getElementById("lock").style.display = "none";
   document.getElementById("app").style.display = "block";
   loadStatus();
-  setInterval(loadStatus, 60000);
+  setInterval(loadStatus, 30000);
 }
 </script>
 </body>
