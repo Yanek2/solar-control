@@ -81,18 +81,13 @@ async def run() -> None:
     logger.info("IBEX price: %.2f EUR/MWh  (threshold: %.2f)", price, PRICE_THRESHOLD)
     desired = MODE_ZERO_EXPORT if price < PRICE_THRESHOLD else MODE_NO_LIMIT
 
-    if desired != current_mode:
-        logger.info("Mode change: %s → %s", current_mode or "unknown", desired)
-        success = await set_power_control_mode(username, password, desired, retries=MAX_RETRIES)
-        if success:
-            current_mode = desired
-            _write_status(current_mode, price)
-        else:
-            logger.error("Failed to apply mode '%s'", desired)
-            _write_status(current_mode, price, f"Failed to apply mode '{desired}'")
+    logger.info("Applying desired mode: %s (last known: %s)", desired, current_mode or "unknown")
+    success = await set_power_control_mode(username, password, desired, retries=MAX_RETRIES)
+    if success:
+        _write_status(desired, price)
     else:
-        logger.info("Mode unchanged: %s", current_mode)
-        _write_status(current_mode, price)
+        logger.error("Failed to apply mode '%s'", desired)
+        _write_status(current_mode, price, f"Failed to apply mode '{desired}'")
 
 
 if __name__ == "__main__":
