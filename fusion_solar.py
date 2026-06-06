@@ -679,14 +679,30 @@ async def _set_apc(page: Page, mode: str) -> bool:
         logger.warning("Toast seen but read-back shows '%s' -- proceeding", verified_val)
         return True
 
-    # No popup and no toast — read-back alone is unreliable (the dropdown DOM
-    # reflects the locally-changed value even when the server save failed).
-    logger.error(
-        "Save failed: no popup dismissed, no success toast. "
-        "APC reads '%s' but this may be local DOM state (check debug/08_after_save.png)",
-        verified_val,
-    )
-    return False
+    # No popup and no toast — reload the page and re-read to distinguish
+    # local DOM state from a real server-committed change.
+    logger.info("No popup/toast — reloading page to verify server state ...")
+    try:
+        await page.reload(wait_until="domcontentloaded", timeout=30_000)
+        await _delay(3000, 5000)
+        reload_val = await page.evaluate(_READ_APC_JS)
+        logger.info("Post-reload APC value: '%s'", reload_val)
+        await _shot(page, "08b_after_reload")
+        reload_matches = reload_val and any(
+            lbl.lower() in reload_val.lower() or reload_val.lower() in lbl.lower()
+            for lbl in labels
+        )
+        if reload_matches:
+            logger.info("Save verified via page reload: APC reads '%s'", reload_val)
+            return True
+        logger.error(
+            "Save failed: post-reload APC reads '%s', expected one of %s",
+            reload_val, labels,
+        )
+        return False
+    except Exception as exc:
+        logger.error("Reload verification failed: %s -- treating as failed save", exc)
+        return False
 
 
 # ---------------------------------------------------------------------------
