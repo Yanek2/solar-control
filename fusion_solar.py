@@ -623,14 +623,12 @@ async def _set_apc(page: Page, mode: str) -> bool:
         }
         return null;
     }"""
-    popup_dismissed = False
     for attempt in range(4):
         await _delay(1200, 2000)
         try:
             result = await page.evaluate(_DISMISS_POPUP_JS)
             if result:
                 logger.info("Dismissed confirmation popup (attempt %d): %s", attempt + 1, result)
-                popup_dismissed = True
                 break
             logger.debug("No confirmation popup found on attempt %d", attempt + 1)
         except Exception as exc:
@@ -639,49 +637,21 @@ async def _set_apc(page: Page, mode: str) -> bool:
     await _delay(2000, 3500)
     await _shot(page, "08_after_save")
 
-    toast_seen = False
     try:
         await page.wait_for_selector(
             ".el-message--success, .ant-message-success, "
             "text=success, text=Success, text=Saved",
             timeout=8000,
         )
-        logger.info("Save confirmed by success toast")
-        toast_seen = True
+        logger.info("Save: success toast seen")
     except Exception:
-        logger.warning("No success toast -- verifying by reading back dropdown value")
+        pass
 
-    # Read back the APC dropdown to confirm.
-    await _delay(1500, 2500)
-    verified_val = await page.evaluate(_READ_APC_JS)
-    logger.info("Post-save APC value: '%s'", verified_val)
-
-    read_matches_target = verified_val and any(
-        lbl.lower() in verified_val.lower() or verified_val.lower() in lbl.lower()
-        for lbl in labels
-    )
-
-    if popup_dismissed:
-        if read_matches_target:
-            logger.info("Save verified: popup dismissed + APC reads '%s'", verified_val)
-        else:
-            logger.warning(
-                "Popup dismissed (server committed); read-back shows '%s' "
-                "(DOM reader may be targeting wrong element)", verified_val,
-            )
-        return True
-
-    if toast_seen and read_matches_target:
-        logger.info("Save verified: toast + APC reads '%s'", verified_val)
-        return True
-
-    if toast_seen:
-        logger.warning("Toast seen but read-back shows '%s' -- proceeding", verified_val)
-        return True
-
-    # No popup and no toast — reload the page and re-read to distinguish
-    # local DOM state from a real server-committed change.
-    logger.info("No popup/toast — reloading page to verify server state ...")
+    # Always reload and verify server-committed state.
+    # Same-session APC reads and popup dismissals are unreliable:
+    # FusionSolar's "OK" popup is a pre-save confirmation, not a success notification,
+    # and the dropdown reflects local DOM state until a fresh page load.
+    logger.info("Reloading page to verify server state ...")
     try:
         await page.reload(wait_until="domcontentloaded", timeout=30_000)
         await _delay(3000, 5000)
