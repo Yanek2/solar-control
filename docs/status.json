@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-06-13 11:55 UTC",
+  "timestamp": "2026-06-13 12:00 UTC",
   "mode": "zero_export",
-  "price": -4.0,
+  "price": -3.0,
   "threshold": 15.0,
   "error": null,
   "last_applied_utc": "2026-06-13T10:31:27.622356+00:00"
