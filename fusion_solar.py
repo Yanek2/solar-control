@@ -110,6 +110,57 @@ async def _click(page: Page, selectors: list[str], timeout: int = 6000) -> bool:
     return False
 
 
+# FusionSolar occasionally shows a "Function Update" feature-announcement modal
+# (e.g. advertising the market electricity price chart) right after navigating
+# into Device Management. It attaches outside the SPA router and stays open
+# through later in-app navigation, covering the Configuration tab / Active
+# Power Control control until dismissed.
+_DISMISS_FEATURE_MODAL_JS = """() => {
+    const exact = ['do not show again', "don't show again", 'no more prompts'];
+    for (const btn of document.querySelectorAll('button')) {
+        const t = (btn.innerText || btn.textContent || '').trim().toLowerCase();
+        if (exact.includes(t)) {
+            const r = btn.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) {
+                btn.click();
+                return 'button:' + t;
+            }
+        }
+    }
+    for (const heading of document.querySelectorAll('*')) {
+        if ((heading.innerText || '').trim() !== 'Function Update') continue;
+        let dialog = heading.closest('.el-dialog, .ant-modal, [role="dialog"], [class*="modal" i], [class*="dialog" i]')
+            || heading.parentElement;
+        for (let i = 0; i < 4 && dialog; i++, dialog = dialog.parentElement) {
+            const closeBtn = dialog.querySelector(
+                '.el-dialog__close, .el-icon-close, .ant-modal-close, [aria-label="Close" i]'
+            );
+            if (closeBtn) {
+                const r = closeBtn.getBoundingClientRect();
+                if (r.width > 0 && r.height > 0) {
+                    closeBtn.click();
+                    return 'close-icon';
+                }
+            }
+        }
+        break;
+    }
+    return null;
+}"""
+
+
+async def _dismiss_feature_modal(page: Page) -> bool:
+    try:
+        result = await page.evaluate(_DISMISS_FEATURE_MODAL_JS)
+        if result:
+            logger.info("Dismissed feature-announcement modal: %s", result)
+            await _delay(500, 1000)
+            return True
+    except Exception as exc:
+        logger.debug("Feature modal dismiss check failed: %s", exc)
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Browser launch
 # ---------------------------------------------------------------------------
@@ -306,6 +357,7 @@ async def _open_device_management(page: Page) -> bool:
         if result:
             logger.info("Plant-level Device Management clicked: %s", result)
             await _delay(4000, 6000)
+            await _dismiss_feature_modal(page)
             await _shot(page, "03_device_list")
             return True
     except Exception as exc:
@@ -353,6 +405,7 @@ async def _open_dongle(page: Page) -> bool:
             return False
 
     await _delay(2000, 3000)
+    await _dismiss_feature_modal(page)
     await _shot(page, "04_dongle_detail")
 
     # Verify detail panel opened
@@ -373,6 +426,7 @@ async def _open_dongle(page: Page) -> bool:
 # ---------------------------------------------------------------------------
 
 async def _open_config_tab(page: Page) -> bool:
+    await _dismiss_feature_modal(page)
     ok = await _click(page, [
         'a:has-text("Configuration")',
         '[role="tab"]:has-text("Configuration")',
@@ -396,6 +450,8 @@ async def _open_config_tab(page: Page) -> bool:
 async def _set_apc(page: Page, mode: str) -> bool:
     labels = _MODE_LABELS[mode]
     logger.info("Target mode labels: %s", labels)
+
+    await _dismiss_feature_modal(page)
 
     # Scroll to APC section
     found = False
