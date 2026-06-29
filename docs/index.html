@@ -91,14 +91,14 @@ async function loadStatus() {
         const t = dt.toLocaleTimeString("en-GB",{timeZone:tz,hour:"2-digit",minute:"2-digit"});
         return t + " " + label;
       };
-      const day = dt.toLocaleDateString("en-GB",{timeZone:"UTC",day:"2-digit",month:"2-digit"});
+      const day = dt.toLocaleDateString("en-GB",{timeZone:"Europe/Sofia",day:"2-digit",month:"2-digit"});
       tsEl.innerHTML = day + "<br>"
-        + fmt("UTC","UTC") + " &nbsp; "
         + fmt("Europe/Sofia","BG") + " &nbsp; "
+        + fmt("UTC","UTC") + " &nbsp; "
         + fmt("Europe/London","UK");
     } else { tsEl.textContent = "—"; }
 
-    const stale = !d.timestamp || (Date.now() - new Date(d.timestamp.replace(" UTC","Z")).getTime()) > 21600000;
+    const stale = !d.timestamp || (Date.now() - dt.getTime()) > 21600000;
     document.getElementById("stale").style.display = stale ? "block" : "none";
 
     const errEl = document.getElementById("errbanner");

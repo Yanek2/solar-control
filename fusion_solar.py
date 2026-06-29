@@ -149,6 +149,27 @@ _DISMISS_FEATURE_MODAL_JS = """() => {
 }"""
 
 
+async def _dismiss_login_notification(page: Page) -> None:
+    """Dismiss the 'Hello <user>' login success notification that appears after login."""
+    try:
+        await page.evaluate("""() => {
+            const selectors = [
+                '.el-notification__closeBtn',
+                '.ant-notification-notice-close',
+                '[class*="notification" i] .el-icon-close',
+                '[class*="Notification"] [class*="close" i]',
+            ];
+            for (const sel of selectors) {
+                for (const btn of document.querySelectorAll(sel)) {
+                    const r = btn.getBoundingClientRect();
+                    if (r.width > 0 && r.height > 0) { btn.click(); return; }
+                }
+            }
+        }""")
+    except Exception:
+        pass
+
+
 async def _dismiss_feature_modal(page: Page) -> bool:
     try:
         result = await page.evaluate(_DISMISS_FEATURE_MODAL_JS)
@@ -337,25 +358,37 @@ async def _open_plant_tab(context: BrowserContext, page: Page) -> Page | None:
 async def _open_device_management(page: Page) -> bool:
     """Click the Device Management tab within the plant view (NOT the global nav link)."""
     logger.info("Navigating to plant-level Device Management ...")
+    await _dismiss_login_notification(page)
     await _delay(2000, 3000)
 
-    # JS: click the first "Device Management" element whose href does NOT go to /settings/
+    # Find the plant-level tab bar by locating "Overview" tab, then clicking
+    # its sibling "Device Management" tab in the same container.
+    # This avoids hitting the global Plants nav dropdown which also has
+    # a "Device Management" link but does not navigate to the device list.
     try:
         result = await page.evaluate("""() => {
-            for (const tag of ['a', 'button', 'li', 'span', 'div']) {
+            for (const tag of ['a', 'span', 'li']) {
                 for (const el of document.querySelectorAll(tag)) {
-                    const text = (el.innerText || el.textContent || '').trim();
-                    if (text !== 'Device Management') continue;
-                    const href = el.getAttribute('href') || '';
-                    if (href.includes('/settings/')) continue;
-                    el.click();
-                    return tag + ':' + href;
+                    if ((el.innerText || '').trim() !== 'Overview') continue;
+                    const r = el.getBoundingClientRect();
+                    if (r.width === 0 || r.height === 0) continue;
+                    let parent = el.parentElement;
+                    for (let i = 0; i < 6 && parent; i++, parent = parent.parentElement) {
+                        for (const child of parent.querySelectorAll('a, span, li')) {
+                            if ((child.innerText || '').trim() !== 'Device Management') continue;
+                            const cr = child.getBoundingClientRect();
+                            if (cr.width > 0 && cr.height > 0) {
+                                child.click();
+                                return child.tagName + ':' + child.className;
+                            }
+                        }
+                    }
                 }
             }
             return null;
         }""")
         if result:
-            logger.info("Plant-level Device Management clicked: %s", result)
+            logger.info("Plant-level Device Management tab clicked: %s", result)
             await _delay(4000, 6000)
             await _dismiss_feature_modal(page)
             await _shot(page, "03_device_list")
@@ -417,8 +450,8 @@ async def _open_dongle(page: Page) -> bool:
         except Exception:
             continue
 
-    logger.warning("Dongle detail panel not confirmed -- proceeding anyway")
-    return True
+    logger.error("Dongle detail panel did not open -- see debug/04_dongle_detail.png")
+    return False
 
 
 # ---------------------------------------------------------------------------
