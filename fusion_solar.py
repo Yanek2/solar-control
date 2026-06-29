@@ -364,53 +364,27 @@ async def _open_device_management(page: Page) -> bool:
     # id pvmsDeviceManagement) that lives in a collapsed dropdown and appears FIRST
     # in the DOM. Wait for the plant-level tab (which has neither of those attributes)
     # to become visible, then click it.
-    _FIND_DM_TAB_JS = """() => {
-        for (const el of document.querySelectorAll('*')) {
-            const t = (el.innerText || el.textContent || '').trim();
-            if (t !== 'Device Management') continue;
-            const cls = String(el.className || '');
-            const id  = String(el.id || '');
-            if (cls.includes('threeMenu') || id.includes('pvms')) continue;
-            const r = el.getBoundingClientRect();
-            if (r.width > 0 && r.height > 0) {
-                el.click();
-                return el.tagName + ':' + id + ':' + cls.slice(0, 60);
-            }
-        }
-        return null;
-    }"""
-
-    try:
-        await page.wait_for_function(
-            """() => {
-                for (const el of document.querySelectorAll('*')) {
-                    const t = (el.innerText || el.textContent || '').trim();
-                    if (t !== 'Device Management') continue;
-                    const cls = String(el.className || '');
-                    const id  = String(el.id || '');
-                    if (cls.includes('threeMenu') || id.includes('pvms')) continue;
-                    const r = el.getBoundingClientRect();
-                    if (r.width > 0 && r.height > 0) return true;
-                }
-                return false;
-            }""",
-            timeout=15_000,
-        )
-    except Exception as exc:
-        logger.warning("Timed out waiting for plant-level DM tab: %s", exc)
-
-    await _delay(500, 1000)
-
-    try:
-        result = await page.evaluate(_FIND_DM_TAB_JS)
-        if result:
-            logger.info("Plant-level Device Management tab clicked: %s", result)
+    # The plant-level tab is a <span class="monitor-tab"> element.
+    # The global nav also has a "Device Management" span (class=threeMenu_content)
+    # which is hidden in a collapsed dropdown. Playwright's native click() dispatches
+    # real pointer events that Vue Router responds to; JS el.click() does not.
+    selectors = [
+        'span.monitor-tab:has-text("Device Management")',
+        '.monitor-tab:has-text("Device Management")',
+        # Broader fallback: any visible non-threeMenu element with that text
+    ]
+    for sel in selectors:
+        try:
+            loc = page.locator(sel).first
+            await loc.wait_for(state="visible", timeout=15_000)
+            await loc.click()
+            logger.info("Device Management tab clicked via: %s", sel)
             await _delay(4000, 6000)
             await _dismiss_feature_modal(page)
             await _shot(page, "03_device_list")
             return True
-    except Exception as exc:
-        logger.error("JS click failed: %s", exc)
+        except Exception as exc:
+            logger.warning("Selector '%s' failed: %s", sel, exc)
 
     logger.error("Could not navigate to plant-level Device Management")
     return False
