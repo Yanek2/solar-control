@@ -360,27 +360,60 @@ async def _open_device_management(page: Page) -> bool:
     logger.info("Navigating to plant-level Device Management ...")
     await _dismiss_login_notification(page)
 
-    # Wait for the plant-level tab bar to render (Overview tab is always first).
-    try:
-        await page.wait_for_selector('text="Overview"', state="visible", timeout=15_000)
-    except Exception:
-        pass
-    await _delay(1000, 2000)
+    # The global nav also has a 'Device Management' element (class threeMenu_content,
+    # id pvmsDeviceManagement) that lives in a collapsed dropdown and appears FIRST
+    # in the DOM. Wait for the plant-level tab (which has neither of those attributes)
+    # to become visible, then click it.
+    _FIND_DM_TAB_JS = """() => {
+        for (const el of document.querySelectorAll('*')) {
+            const t = (el.innerText || el.textContent || '').trim();
+            if (t !== 'Device Management') continue;
+            const cls = String(el.className || '');
+            const id  = String(el.id || '');
+            if (cls.includes('threeMenu') || id.includes('pvms')) continue;
+            const r = el.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) {
+                el.click();
+                return el.tagName + ':' + id + ':' + cls.slice(0, 60);
+            }
+        }
+        return null;
+    }"""
 
-    # The global Plants nav "Device Management" lives inside a collapsed dropdown
-    # so it is not visible. Playwright's state="visible" therefore finds only the
-    # plant-level tab, making an extra sibling search unnecessary.
     try:
-        await page.wait_for_selector('text="Device Management"', state="visible", timeout=10_000)
-        await page.click('text="Device Management"', timeout=5_000)
-        logger.info("Device Management tab clicked")
-        await _delay(4000, 6000)
-        await _dismiss_feature_modal(page)
-        await _shot(page, "03_device_list")
-        return True
+        await page.wait_for_function(
+            """() => {
+                for (const el of document.querySelectorAll('*')) {
+                    const t = (el.innerText || el.textContent || '').trim();
+                    if (t !== 'Device Management') continue;
+                    const cls = String(el.className || '');
+                    const id  = String(el.id || '');
+                    if (cls.includes('threeMenu') || id.includes('pvms')) continue;
+                    const r = el.getBoundingClientRect();
+                    if (r.width > 0 && r.height > 0) return true;
+                }
+                return false;
+            }""",
+            timeout=15_000,
+        )
     except Exception as exc:
-        logger.error("Could not click Device Management tab: %s", exc)
-        return False
+        logger.warning("Timed out waiting for plant-level DM tab: %s", exc)
+
+    await _delay(500, 1000)
+
+    try:
+        result = await page.evaluate(_FIND_DM_TAB_JS)
+        if result:
+            logger.info("Plant-level Device Management tab clicked: %s", result)
+            await _delay(4000, 6000)
+            await _dismiss_feature_modal(page)
+            await _shot(page, "03_device_list")
+            return True
+    except Exception as exc:
+        logger.error("JS click failed: %s", exc)
+
+    logger.error("Could not navigate to plant-level Device Management")
+    return False
 
 
 # ---------------------------------------------------------------------------
