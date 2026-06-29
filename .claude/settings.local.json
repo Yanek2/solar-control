@@ -24,7 +24,28 @@
       "PowerShell(gh *)",
       "PowerShell(winget install *)",
       "PowerShell(gh auth *)",
-      "PowerShell(git *)"
+      "PowerShell(git *)",
+      "Bash(git add *)",
+      "Bash(git rebase *)",
+      "Bash(git push *)",
+      "Bash(git stash *)",
+      "Bash(gh run *)",
+      "Bash(git pull *)",
+      "Bash(git checkout *)",
+      "Bash(git merge *)",
+      "WebFetch(domain:ibex.bg)",
+      "Bash(gh workflow *)",
+      "Bash(gh api *)",
+      "Bash(cd /tmp)",
+      "Bash(unzip -o ibex_debug.zip -d ibex_debug)",
+      "Read(//tmp/**)",
+      "Bash(cp /tmp/ibex_debug/ibex_page.png /tmp/ibex_screenshot.png)",
+      "Bash(unzip -o ibex2.zip -d ibex2)",
+      "Bash(cp ibex2/ibex_page.png \"C:/Users/ykara/Downloads/ibex2.png\")",
+      "Bash(python -c \"import json,sys; runs=[r for r in json.load\\(sys.stdin\\) if r['name']=='Solar Control']; [print\\(r['startedAt'], r['conclusion'], r['databaseId']\\) for r in runs]\")",
+      "Bash(python -c \"import json,sys; runs=[r for r in json.load\\(sys.stdin\\) if r['name']=='Solar Control']; [print\\(r['startedAt'], r['conclusion'], r['databaseId']\\) for r in runs[-20:]]\")",
+      "Bash(git fetch *)",
+      "Bash(python -m py_compile fusion_solar.py)"
     ]
   }
 }
