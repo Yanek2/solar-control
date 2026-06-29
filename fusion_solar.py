@@ -359,45 +359,28 @@ async def _open_device_management(page: Page) -> bool:
     """Click the Device Management tab within the plant view (NOT the global nav link)."""
     logger.info("Navigating to plant-level Device Management ...")
     await _dismiss_login_notification(page)
-    await _delay(2000, 3000)
 
-    # Find the plant-level tab bar by locating "Overview" tab, then clicking
-    # its sibling "Device Management" tab in the same container.
-    # This avoids hitting the global Plants nav dropdown which also has
-    # a "Device Management" link but does not navigate to the device list.
+    # Wait for the plant-level tab bar to render (Overview tab is always first).
     try:
-        result = await page.evaluate("""() => {
-            for (const tag of ['a', 'span', 'li']) {
-                for (const el of document.querySelectorAll(tag)) {
-                    if ((el.innerText || '').trim() !== 'Overview') continue;
-                    const r = el.getBoundingClientRect();
-                    if (r.width === 0 || r.height === 0) continue;
-                    let parent = el.parentElement;
-                    for (let i = 0; i < 6 && parent; i++, parent = parent.parentElement) {
-                        for (const child of parent.querySelectorAll('a, span, li')) {
-                            if ((child.innerText || '').trim() !== 'Device Management') continue;
-                            const cr = child.getBoundingClientRect();
-                            if (cr.width > 0 && cr.height > 0) {
-                                child.click();
-                                return child.tagName + ':' + child.className;
-                            }
-                        }
-                    }
-                }
-            }
-            return null;
-        }""")
-        if result:
-            logger.info("Plant-level Device Management tab clicked: %s", result)
-            await _delay(4000, 6000)
-            await _dismiss_feature_modal(page)
-            await _shot(page, "03_device_list")
-            return True
-    except Exception as exc:
-        logger.warning("JS Device Management click failed: %s", exc)
+        await page.wait_for_selector('text="Overview"', state="visible", timeout=15_000)
+    except Exception:
+        pass
+    await _delay(1000, 2000)
 
-    logger.error("Could not navigate to plant-level Device Management")
-    return False
+    # The global Plants nav "Device Management" lives inside a collapsed dropdown
+    # so it is not visible. Playwright's state="visible" therefore finds only the
+    # plant-level tab, making an extra sibling search unnecessary.
+    try:
+        await page.wait_for_selector('text="Device Management"', state="visible", timeout=10_000)
+        await page.click('text="Device Management"', timeout=5_000)
+        logger.info("Device Management tab clicked")
+        await _delay(4000, 6000)
+        await _dismiss_feature_modal(page)
+        await _shot(page, "03_device_list")
+        return True
+    except Exception as exc:
+        logger.error("Could not click Device Management tab: %s", exc)
+        return False
 
 
 # ---------------------------------------------------------------------------
