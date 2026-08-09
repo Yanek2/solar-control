@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-08-09 13:41 UTC",
+  "timestamp": "2026-08-09 13:49 UTC",
   "mode": "zero_export",
-  "price": 0.0,
+  "price": 121.11,
   "threshold": 15.0,
-  "error": null,
+  "error": "Failed to apply mode 'no_limit'",
   "last_applied_utc": "2026-08-09T13:23:36.301569+00:00"
 }
