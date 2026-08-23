@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-08-23 05:40 UTC",
+  "timestamp": "2026-08-23 05:46 UTC",
   "mode": "no_limit",
-  "price": 130.0,
+  "price": 119.86,
   "threshold": 15.0,
   "error": null,
-  "last_applied_utc": "2026-08-23T03:41:50.518602+00:00"
+  "last_applied_utc": "2026-08-23T05:46:37.502883+00:00"
 }
